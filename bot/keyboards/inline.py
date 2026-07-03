@@ -1,5 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from bot.services.premium import DONATTY_URL
+
 
 def recipe_actions_kb(recipe_id: str, is_favorite: bool) -> InlineKeyboardMarkup:
     fav_text = "💔 Удалить из избранного" if is_favorite else "⭐ В избранное"
@@ -131,3 +133,14 @@ def favorites_kb(recipes: list[tuple[str, str]]) -> InlineKeyboardMarkup:
     else:
         buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def premium_kb(is_premium: bool) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text="☕ Поддержать на Donatty", url=DONATTY_URL)],
+    ]
+    if not is_premium:
+        rows.append(
+            [InlineKeyboardButton(text="🔄 Проверить статус", callback_data="premium:check")]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)

@@ -6,7 +6,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.database.db import Database
-from bot.handlers import help, menu, preferences, recipes, start
+from bot.handlers import help, menu, preferences, premium, recipes, start
 from bot.middlewares.db import DatabaseMiddleware
 from config import Config
 
@@ -26,6 +26,7 @@ def create_bot_and_dispatcher(config: Config | None = None) -> tuple[Bot, Dispat
     dp.update.middleware(DatabaseMiddleware(db))
 
     dp.include_router(start.router)
+    dp.include_router(premium.router)
     dp.include_router(menu.router)
     dp.include_router(preferences.router)
     dp.include_router(help.router)

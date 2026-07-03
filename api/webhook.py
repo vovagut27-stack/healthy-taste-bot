@@ -53,6 +53,13 @@ class handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(payload.encode("utf-8"))
+        except ValueError as exc:
+            logger.error("Configuration error: %s", exc)
+            payload = json.dumps({"ok": False, "error": str(exc)})
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(payload.encode("utf-8"))
         except Exception:
             logger.exception("Webhook error")
             payload = json.dumps({"ok": False})

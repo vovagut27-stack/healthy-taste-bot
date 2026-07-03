@@ -2,6 +2,11 @@
 name = "healthy-taste-bot"
 version = "1.0.0"
 requires-python = ">=3.11"
+dependencies = [
+    "aiogram==3.17.0",
+    "python-dotenv==1.0.1",
+    "aiosqlite==0.20.0",
+]
 
 [tool.vercel]
 entrypoint = "api.webhook:handler"

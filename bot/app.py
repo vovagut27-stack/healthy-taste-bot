@@ -13,7 +13,9 @@ from config import Config
 
 def create_bot_and_dispatcher(config: Config | None = None) -> tuple[Bot, Dispatcher, Database]:
     config = config or Config.from_env()
-    os.makedirs(os.path.dirname(config.db_path) or ".", exist_ok=True)
+    db_dir = os.path.dirname(config.db_path)
+    if db_dir and db_dir not in (".", "/tmp"):
+        os.makedirs(db_dir, exist_ok=True)
 
     db = Database(config.db_path)
     bot = Bot(

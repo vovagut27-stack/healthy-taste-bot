@@ -8,6 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.database.db import Database
 from bot.handlers import help, menu, preferences, premium, recipes, start
 from bot.middlewares.db import DatabaseMiddleware
+from bot.middlewares.lang import LanguageMiddleware
 from config import Config
 
 
@@ -24,6 +25,7 @@ def create_bot_and_dispatcher(config: Config | None = None) -> tuple[Bot, Dispat
     )
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.middleware(DatabaseMiddleware(db))
+    dp.update.middleware(LanguageMiddleware())
 
     dp.include_router(start.router)
     dp.include_router(premium.router)

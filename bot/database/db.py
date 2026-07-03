@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS preferences (
     diet TEXT DEFAULT 'pp',
     goal TEXT DEFAULT 'maintain',
     max_cook_time TEXT DEFAULT 'any',
+    language TEXT DEFAULT 'ru',
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
@@ -46,6 +47,12 @@ class Database:
             try:
                 await conn.execute(
                     "ALTER TABLE users ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0"
+                )
+            except aiosqlite.OperationalError:
+                pass
+            try:
+                await conn.execute(
+                    "ALTER TABLE preferences ADD COLUMN language TEXT DEFAULT 'ru'"
                 )
             except aiosqlite.OperationalError:
                 pass
@@ -147,21 +154,33 @@ class Database:
         async with aiosqlite.connect(self.db_path) as conn:
             conn.row_factory = aiosqlite.Row
             cursor = await conn.execute(
-                "SELECT diet, goal, max_cook_time FROM preferences WHERE user_id = ?",
+                "SELECT diet, goal, max_cook_time, language FROM preferences WHERE user_id = ?",
                 (user_id,),
             )
             row = await cursor.fetchone()
             if row is None:
-                return {"diet": "pp", "goal": "maintain", "max_cook_time": "any"}
-            return dict(row)
+                return {
+                    "diet": "pp",
+                    "goal": "maintain",
+                    "max_cook_time": "any",
+                    "language": "ru",
+                }
+            data = dict(row)
+            if not data.get("language"):
+                data["language"] = "ru"
+            return data
 
     async def update_preference(
         self, user_id: int, field: str, value: str
     ) -> None:
-        allowed = {"diet", "goal", "max_cook_time"}
+        allowed = {"diet", "goal", "max_cook_time", "language"}
         if field not in allowed:
             raise ValueError(f"Unknown preference field: {field}")
         async with aiosqlite.connect(self.db_path) as conn:
+            await conn.execute(
+                "INSERT OR IGNORE INTO preferences (user_id) VALUES (?)",
+                (user_id,),
+            )
             await conn.execute(
                 f"UPDATE preferences SET {field} = ? WHERE user_id = ?",
                 (value, user_id),

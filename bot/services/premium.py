@@ -1,40 +1,28 @@
+from bot.i18n import get_list, t
+
 DONATTY_URL = "https://donatty.com/creator_bots"
 
-PREMIUM_FEATURES = [
-    "📆 Меню на неделю",
-    "🍽 Эксклюзивные премиум-рецепты",
-    "⭐ Безлимитное избранное",
-    "🎯 Расширенные настройки питания",
-]
-
-# Выдан премиум по запросу автора
 PREGRANTED_USERNAMES = {"fuckther47", "millka_2mky"}
 
 
-def premium_status_text(is_premium: bool) -> str:
-    features = "\n".join(f"  ✓ {f}" for f in PREMIUM_FEATURES)
+def premium_status_text(is_premium: bool, lang: str = "ru") -> str:
+    features = "\n".join(f"  ✓ {f}" for f in get_list(lang, "premium.features"))
     if is_premium:
         return (
-            "<b>💎 Премиум активен</b>\n\n"
-            "Спасибо, что поддерживаете проект! Вам доступно:\n"
-            f"{features}\n\n"
-            f"☕ Поддержать автора: <a href=\"{DONATTY_URL}\">Donatty</a>"
+            t(lang, "premium.active_title")
+            + t(lang, "premium.active_body")
+            + f"{features}\n\n"
+            + t(lang, "premium.support_footer", url=DONATTY_URL)
         )
     return (
-        "<b>💎 Премиум</b>\n\n"
-        "Откройте расширенные возможности бота:\n"
-        f"{features}\n\n"
-        "Поддержите автора — и получите премиум-доступ:\n"
-        f"👉 <a href=\"{DONATTY_URL}\">Поддержать на Donatty</a>\n\n"
-        "<i>После доната напишите /premium — доступ активируется автоматически "
-        "для поддержавших (или свяжитесь с автором).</i>"
+        t(lang, "premium.title")
+        + t(lang, "premium.body")
+        + f"{features}\n\n"
+        + t(lang, "premium.support_cta")
+        + t(lang, "premium.support_link", url=DONATTY_URL)
+        + t(lang, "premium.note")
     )
 
 
-def premium_required_text() -> str:
-    return (
-        "🔒 <b>Эта функция доступна в Премиум</b>\n\n"
-        "📆 Меню на неделю и другие бонусы — для подписчиков премиум.\n\n"
-        f"☕ Поддержать автора: <a href=\"{DONATTY_URL}\">Donatty</a>\n"
-        "После поддержки нажмите /premium"
-    )
+def premium_required_text(lang: str = "ru") -> str:
+    return t(lang, "premium.required", url=DONATTY_URL)

@@ -41,6 +41,9 @@ async def _ensure_app():
 async def _handle_update(body: bytes) -> None:
     from aiogram.types import Update
 
+    if not body:
+        return
+
     bot, dp = await _ensure_app()
     data = json.loads(body.decode("utf-8"))
     update = Update.model_validate(data)
@@ -121,6 +124,8 @@ class handler(BaseHTTPRequestHandler):
             logger.error("Configuration error: %s", exc)
             status = 503
             result = {"ok": False, "error": str(exc)}
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON in webhook body")
         except Exception:
             logger.exception("Webhook error")
 

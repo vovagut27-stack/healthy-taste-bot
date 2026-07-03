@@ -2,42 +2,31 @@ import asyncio
 import json
 import logging
 import os
+import traceback
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from aiogram.types import Update
-
-from bot.app import create_bot_and_dispatcher
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-_bot = None
-_dp = None
-_db = None
-_initialized = False
-
-
-async def _ensure_app():
-    global _bot, _dp, _db, _initialized
-    if _bot is None:
-        from config import Config
-
-        config = Config.from_env()
-        _bot, _dp, _db = create_bot_and_dispatcher(config)
-    if not _initialized:
-        await _db.init()
-        _initialized = True
-    return _bot, _dp
-
 
 async def _handle_update(body: bytes) -> None:
-    bot, dp = await _ensure_app()
-    data = json.loads(body.decode("utf-8"))
-    update = Update.model_validate(data)
-    await dp.feed_update(bot, update)
+    from aiogram.types import Update
+
+    from bot.app import create_bot_and_dispatcher
+    from config import Config
+
+    config = Config.from_env()
+    bot, dp, db = create_bot_and_dispatcher(config)
+    await db.init()
+    try:
+        data = json.loads(body.decode("utf-8"))
+        update = Update.model_validate(data)
+        await dp.feed_update(bot, update)
+    finally:
+        await bot.session.close()
 
 
 def _register_webhook() -> dict:
@@ -69,6 +58,16 @@ def _register_webhook() -> dict:
         return {"ok": False, "error": exc.read().decode("utf-8"), "webhook_url": webhook_url}
     except Exception as exc:
         return {"ok": False, "error": str(exc), "webhook_url": webhook_url}
+
+    info_request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/getWebhookInfo"
+    )
+    try:
+        with urllib.request.urlopen(info_request, timeout=15) as response:
+            info = json.loads(response.read().decode("utf-8"))
+        result["webhook_info"] = info.get("result", {})
+    except Exception:
+        pass
 
     result["webhook_url"] = webhook_url
     return result
@@ -112,7 +111,7 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(payload.encode("utf-8"))
         except Exception:
             logger.exception("Webhook error")
-            payload = json.dumps({"ok": False})
+            payload = json.dumps({"ok": False, "error": traceback.format_exc()[-500:]})
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
             self.end_headers()

@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import traceback
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
@@ -11,22 +10,41 @@ from urllib.parse import parse_qs, urlparse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+_loop: asyncio.AbstractEventLoop | None = None
+_bot = None
+_dp = None
+_db = None
+
+
+def _get_loop() -> asyncio.AbstractEventLoop:
+    global _loop
+    if _loop is None or _loop.is_closed():
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+    return _loop
+
+
+async def _ensure_app():
+    global _bot, _dp, _db
+    if _bot is None:
+        from aiogram.types import Update  # noqa: F401 — warm import
+
+        from bot.app import create_bot_and_dispatcher
+        from config import Config
+
+        config = Config.from_env()
+        _bot, _dp, _db = create_bot_and_dispatcher(config)
+        await _db.init()
+    return _bot, _dp
+
 
 async def _handle_update(body: bytes) -> None:
     from aiogram.types import Update
 
-    from bot.app import create_bot_and_dispatcher
-    from config import Config
-
-    config = Config.from_env()
-    bot, dp, db = create_bot_and_dispatcher(config)
-    await db.init()
-    try:
-        data = json.loads(body.decode("utf-8"))
-        update = Update.model_validate(data)
-        await dp.feed_update(bot, update)
-    finally:
-        await bot.session.close()
+    bot, dp = await _ensure_app()
+    data = json.loads(body.decode("utf-8"))
+    update = Update.model_validate(data)
+    await dp.feed_update(bot, update)
 
 
 def _register_webhook() -> dict:
@@ -93,26 +111,21 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(payload.encode("utf-8"))
 
     def do_POST(self) -> None:
+        status = 200
+        result: dict = {"ok": True}
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
-            asyncio.run(_handle_update(body))
-            payload = json.dumps({"ok": True})
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(payload.encode("utf-8"))
+            _get_loop().run_until_complete(_handle_update(body))
         except ValueError as exc:
             logger.error("Configuration error: %s", exc)
-            payload = json.dumps({"ok": False, "error": str(exc)})
-            self.send_response(503)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(payload.encode("utf-8"))
+            status = 503
+            result = {"ok": False, "error": str(exc)}
         except Exception:
             logger.exception("Webhook error")
-            payload = json.dumps({"ok": False, "error": traceback.format_exc()[-500:]})
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(payload.encode("utf-8"))
+
+        payload = json.dumps(result)
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(payload.encode("utf-8"))

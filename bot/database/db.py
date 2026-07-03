@@ -1,0 +1,126 @@
+import aiosqlite
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    full_name TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS preferences (
+    user_id INTEGER PRIMARY KEY,
+    diet TEXT DEFAULT 'pp',
+    goal TEXT DEFAULT 'maintain',
+    max_cook_time TEXT DEFAULT 'any',
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    recipe_id TEXT NOT NULL,
+    saved_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, recipe_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+"""
+
+
+class Database:
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+
+    async def connect(self) -> aiosqlite.Connection:
+        conn = await aiosqlite.connect(self.db_path)
+        conn.row_factory = aiosqlite.Row
+        return conn
+
+    async def init(self) -> None:
+        async with await self.connect() as conn:
+            await conn.executescript(SCHEMA)
+            await conn.commit()
+
+    async def ensure_user(
+        self, user_id: int, username: str | None, full_name: str | None
+    ) -> None:
+        async with await self.connect() as conn:
+            await conn.execute(
+                """
+                INSERT INTO users (user_id, username, full_name)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username = excluded.username,
+                    full_name = excluded.full_name
+                """,
+                (user_id, username, full_name),
+            )
+            await conn.execute(
+                """
+                INSERT OR IGNORE INTO preferences (user_id)
+                VALUES (?)
+                """,
+                (user_id,),
+            )
+            await conn.commit()
+
+    async def get_preferences(self, user_id: int) -> dict:
+        async with await self.connect() as conn:
+            cursor = await conn.execute(
+                "SELECT diet, goal, max_cook_time FROM preferences WHERE user_id = ?",
+                (user_id,),
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                return {"diet": "pp", "goal": "maintain", "max_cook_time": "any"}
+            return dict(row)
+
+    async def update_preference(
+        self, user_id: int, field: str, value: str
+    ) -> None:
+        allowed = {"diet", "goal", "max_cook_time"}
+        if field not in allowed:
+            raise ValueError(f"Unknown preference field: {field}")
+        async with await self.connect() as conn:
+            await conn.execute(
+                f"UPDATE preferences SET {field} = ? WHERE user_id = ?",
+                (value, user_id),
+            )
+            await conn.commit()
+
+    async def add_favorite(self, user_id: int, recipe_id: str) -> bool:
+        async with await self.connect() as conn:
+            try:
+                await conn.execute(
+                    "INSERT INTO favorites (user_id, recipe_id) VALUES (?, ?)",
+                    (user_id, recipe_id),
+                )
+                await conn.commit()
+                return True
+            except aiosqlite.IntegrityError:
+                return False
+
+    async def remove_favorite(self, user_id: int, recipe_id: str) -> None:
+        async with await self.connect() as conn:
+            await conn.execute(
+                "DELETE FROM favorites WHERE user_id = ? AND recipe_id = ?",
+                (user_id, recipe_id),
+            )
+            await conn.commit()
+
+    async def is_favorite(self, user_id: int, recipe_id: str) -> bool:
+        async with await self.connect() as conn:
+            cursor = await conn.execute(
+                "SELECT 1 FROM favorites WHERE user_id = ? AND recipe_id = ?",
+                (user_id, recipe_id),
+            )
+            return await cursor.fetchone() is not None
+
+    async def get_favorites(self, user_id: int) -> list[str]:
+        async with await self.connect() as conn:
+            cursor = await conn.execute(
+                "SELECT recipe_id FROM favorites WHERE user_id = ? ORDER BY saved_at DESC",
+                (user_id,),
+            )
+            rows = await cursor.fetchall()
+            return [row["recipe_id"] for row in rows]
